@@ -1,0 +1,51 @@
+name: 更新cli-proxy-api镜像版本
+
+on:
+  schedule:
+    - cron: '58 23 * * *' #这里是UTC时间,相当于北京时间7:58
+  workflow_dispatch:
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: cli-proxy-api-plus
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest image tag
+        id: get-version
+        run: |
+          # 使用 Docker Hub API 获取最新标签信息
+          RESPONSE=$(curl -s https://hub.docker.com/v2/repositories/eceasy/cli-proxy-api/tags?page_size=1)
+          
+          # 提取版本号
+          VERSION=$(echo $RESPONSE | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+          
+          if [ -z "$VERSION" ]; then
+            VERSION="latest"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Latest version: $VERSION"
+
+      - name: Update version file
+        run: |
+          echo "${{ steps.get-version.outputs.version }}" > version
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add version
+          
+          # 检查是否有变化
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update version to ${{ steps.get-version.outputs.version }}"
+            git push origin cli-proxy-api
+          fi
